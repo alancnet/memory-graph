@@ -4,6 +4,9 @@ const RID = '@rid'
 const TYPE = '@type'
 const VERTEX = 'VERTEX'
 const EDGE = 'EDGE'
+const CLASS = '@class'
+const REF = '@ref'
+const UPSERT = '@upsert'
 
 const isTraversal = (t) => t && t instanceof Traversal
 function assertIsTraversal (t) {
@@ -158,7 +161,7 @@ class Graph {
       return new Traversal(this, null, [this.nodes[rid]]
         .filter(identity).filter(x => x[TYPE] === EDGE))
     } else {
-      return new Traversal(this, null, this.vertices)
+      return new Traversal(this, null, this.edges)
     }
   }
   manifest (VertexClass, EdgeClass) {
@@ -194,6 +197,52 @@ class Graph {
       vertices: _.cloneDeep(this.vertices),
       edges: _.cloneDeep(this.edges)
     }
+  }
+  learn (knowledge, upsert) {
+    knowledge = _.cloneDeep(knowledge)
+    const refs = {}
+    const addHas = (q, fields, obj, i) =>
+      !fields ? q
+      : typeof fields === 'string' && fields.includes(',')
+      ? addHas(q, fields.split(','), obj, i)
+      : i === undefined ? addHas(q, fields, obj, 0)
+      : i === fields.length ? q
+      : addHas(q.has({[fields[i]]: obj[fields[i]]}), fields, obj, i + 1)
+
+    knowledge.forEach(r => {
+      const ref = r[REF]
+      delete r[REF]
+      var type = r[TYPE]
+      delete r[TYPE]
+      var upsert = r[UPSERT]
+      delete r[UPSERT]
+      if (!type) type =
+        (!r.out && !r.in) ? VERTEX
+        : !!(r.out && r.in) ? EDGE
+        : null
+      if (upsert === undefined) upsert = Object.keys(r)
+      if (type === VERTEX) {
+        const existing = addHas(this.v(), upsert, r)
+        const v = upsert && existing.first() &&
+          Object.assign(existing.first()) ||
+          this.addVertex(r).first()
+
+        if (ref) refs[ref] = v
+      } else if (type === EDGE) {
+        if (!refs[r.out]) throw new Error(`Unknown out ref: ${r.out}`)
+        if (!refs[r.in]) throw new Error(`Unknown in ref: ${r.in}`)
+        r.out = refs[r.out][RID]
+        r.in = refs[r.in][RID]
+        const existing = addHas(this.e(), upsert, r)
+        const e = upsert && existing.first() &&
+          Object.assign(existing.first()) ||
+          this.addEdge(this.v(r.out), this.v(r.in), r.label, r).first()
+        if (ref) refs[ref] = e
+      } else {
+        throw new Error(`Unknown type: ${type}`)
+      }
+    })
+    return refs
   }
 }
 
@@ -367,6 +416,9 @@ module.exports = {
   TYPE,
   VERTEX,
   EDGE,
+  CLASS,
+  REF,
+  UPSERT,
   isTraversal,
   assertIsTraversal,
   isVertex,

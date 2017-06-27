@@ -1,4 +1,4 @@
-const { Graph, RID, inKey, outKey } = require('..')
+const { Graph, RID, inKey, outKey, CLASS, REF, UPSERT } = require('..')
 const { expect } = require('chai')
 const util = require('util')
 
@@ -61,5 +61,45 @@ describe('graph', function () {
     expect(a.out_likes[0].c).to.equal(3)
     expect(a.out_likes[0].in).to.exist
     expect(a.out_likes[0].in.b).to.equal(2)
+  })
+
+  const tomActedInGump = [
+    { [REF]: 'tom', name: 'Tom Hanks' },
+    { [REF]: 'gump', name: 'Forrest Gump' },
+    { out: 'tom', label: 'actedIn', in: 'gump' }
+  ]
+  const tomActedInCloud = [
+    { [REF]: 'tom', name: 'Tom Hanks' },
+    { [REF]: 'cloud', name: 'Cloud Atlas' },
+    { out: 'tom', label: 'actedIn', in: 'cloud' }
+  ]
+  const hugoActedInCloud = [
+    { [REF]: 'hugo', name: 'Hugo Weaving' },
+    { [REF]: 'cloud', name: 'Cloud Atlas' },
+    { out: 'hugo', label: 'actedIn', in: 'cloud' }
+  ]
+  const hugoActedInMatrix = [
+    { [REF]: 'hugo', name: 'Hugo Weaving' },
+    { [REF]: 'matrix', name: 'The Matrix' },
+    { out: 'hugo', label: 'actedIn', in: 'matrix' }
+  ]
+
+  it('should be able to learn knowledge', function () {
+    const g = new Graph()
+    const res1 = g.learn(tomActedInGump)
+    expect(g.vertices.length).to.equal(2)
+    expect(g.edges.length).to.equal(1)
+    expect(res1.tom.name).to.equal('Tom Hanks')
+    expect(g.edges[0].label).to.equal('actedIn')
+
+    // Relearning the same info should not result in additional records
+    const res2 = g.learn(tomActedInGump)
+    expect(g.vertices.length).to.equal(2)
+    expect(g.edges.length).to.equal(1)
+    expect(res2.tom).to.equal(res1.tom)
+
+    g.learn(tomActedInCloud)
+    g.learn(hugoActedInCloud)
+    g.learn(hugoActedInMatrix)
   })
 })
